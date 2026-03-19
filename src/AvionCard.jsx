@@ -2,8 +2,13 @@ import { useState, useEffect } from 'react';
 
 export default function AvionCard({ hex, vuelo, altitud }) {
   const [foto, setFoto] = useState(null);
-  // Añadimos "ruta" a nuestro objeto de estado inicial
-  const [datosAvion, setDatosAvion] = useState({ matricula: "N/A", modelo: "N/A", ruta: "Buscando..." });
+  // 1. Añadimos "aerolinea" a nuestro objeto de estado
+  const [datosAvion, setDatosAvion] = useState({ 
+    matricula: "N/A", 
+    modelo: "N/A", 
+    ruta: "Buscando...", 
+    aerolinea: "Cargando..." 
+  });
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -12,36 +17,38 @@ export default function AvionCard({ hex, vuelo, altitud }) {
         let infoMatricula = "N/A";
         let infoModelo = "N/A";
         let infoRuta = "Ruta no disponible";
+        let infoAerolinea = "Desconocida"; // Variable para la aerolínea
 
-        // 1. Buscamos el Modelo y la Matrícula (HexDB por HEX)
+        // 1. Buscamos en HexDB (AQUÍ SACAMOS LA AEROLÍNEA)
         const resAvion = await fetch(`https://hexdb.io/api/v1/aircraft/${hex.toUpperCase()}`);
         if (resAvion.ok) {
           const info = await resAvion.json();
           infoMatricula = info.Registration || "N/A";
           infoModelo = info.ICAOTypeCode || info.Type || "N/A";
+          // Usamos RegisteredOwners, y si está vacío, probamos con el código de operador
+          infoAerolinea = info.RegisteredOwners || info.OperatorFlagCode || "Desconocida"; 
         }
 
-        // 2. Buscamos la Ruta (HexDB por Callsign/Vuelo)
-        // Solo buscamos si tenemos un número de vuelo válido
+        // 2. Buscamos la Ruta
         if (vuelo && vuelo !== "Desconocido") {
           const resRuta = await fetch(`https://hexdb.io/api/v1/route/icao/${vuelo}`);
           if (resRuta.ok) {
             const infoRt = await resRuta.json();
-            // Si la API encuentra la ruta, reemplazamos el guion por una flecha elegante
             if (infoRt.route) {
               infoRuta = infoRt.route.replace("-", " ➔ ");
             }
           }
         }
 
-        // Actualizamos el estado de golpe con todo lo que hemos encontrado
+        // 3. Actualizamos el estado con la aerolínea incluida
         setDatosAvion({
           matricula: infoMatricula,
           modelo: infoModelo,
-          ruta: infoRuta
+          ruta: infoRuta,
+          aerolinea: infoAerolinea
         });
 
-        // 3. Buscamos la foto (Planespotters por HEX)
+        // 4. Buscamos la foto
         const resFoto = await fetch(`https://api.planespotters.net/pub/photos/hex/${hex}`);
         if (resFoto.ok) {
           const infoFoto = await resFoto.json();
@@ -57,7 +64,7 @@ export default function AvionCard({ hex, vuelo, altitud }) {
     };
 
     if (hex) buscarDatosAPI();
-  }, [hex, vuelo]); // React nos pide vigilar también "vuelo" por si cambia
+  }, [hex, vuelo]);
 
   return (
     <div style={{ border: '1px solid #333', padding: '15px', borderRadius: '10px', backgroundColor: '#222', color: 'white', fontFamily: 'sans-serif' }}>
@@ -70,13 +77,17 @@ export default function AvionCard({ hex, vuelo, altitud }) {
         </span>
       </div>
 
-      {/* RUTA DESTACADA */}
+      {/* RUTA */}
       <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px dashed #444' }}>
         <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#fff' }}>
           {datosAvion.ruta}
         </span>
       </div>
 
+      {/* INFORMACIÓN DEL AVIÓN */}
+      <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#aaa' }}>
+        <strong>Aerolínea:</strong> <span style={{ color: '#eee' }}>{datosAvion.aerolinea}</span>
+      </p>
       <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#aaa' }}>
         <strong>Modelo:</strong> {datosAvion.modelo}
       </p>
