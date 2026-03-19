@@ -1,72 +1,100 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 
 export default function AvionCard({ hex, vuelo, altitud }) {
   const [foto, setFoto] = useState(null);
+  // Añadimos "ruta" a nuestro objeto de estado inicial
+  const [datosAvion, setDatosAvion] = useState({ matricula: "N/A", modelo: "N/A", ruta: "Buscando..." });
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    // Función para buscar la foto en Planespotters
-    const buscarFoto = async () => {
+    const buscarDatosAPI = async () => {
       try {
-        const respuesta = await fetch(
-          `https://api.planespotters.net/pub/photos/hex/${hex}`,
-        );
-        const datos = await respuesta.json();
+        let infoMatricula = "N/A";
+        let infoModelo = "N/A";
+        let infoRuta = "Ruta no disponible";
 
-        if (datos.photos && datos.photos.length > 0) {
-          setFoto(datos.photos[0].thumbnail_large.src);
+        // 1. Buscamos el Modelo y la Matrícula (HexDB por HEX)
+        const resAvion = await fetch(`https://hexdb.io/api/v1/aircraft/${hex.toUpperCase()}`);
+        if (resAvion.ok) {
+          const info = await resAvion.json();
+          infoMatricula = info.Registration || "N/A";
+          infoModelo = info.ICAOTypeCode || info.Type || "N/A";
+        }
+
+        // 2. Buscamos la Ruta (HexDB por Callsign/Vuelo)
+        // Solo buscamos si tenemos un número de vuelo válido
+        if (vuelo && vuelo !== "Desconocido") {
+          const resRuta = await fetch(`https://hexdb.io/api/v1/route/icao/${vuelo}`);
+          if (resRuta.ok) {
+            const infoRt = await resRuta.json();
+            // Si la API encuentra la ruta, reemplazamos el guion por una flecha elegante
+            if (infoRt.route) {
+              infoRuta = infoRt.route.replace("-", " ➔ ");
+            }
+          }
+        }
+
+        // Actualizamos el estado de golpe con todo lo que hemos encontrado
+        setDatosAvion({
+          matricula: infoMatricula,
+          modelo: infoModelo,
+          ruta: infoRuta
+        });
+
+        // 3. Buscamos la foto (Planespotters por HEX)
+        const resFoto = await fetch(`https://api.planespotters.net/pub/photos/hex/${hex}`);
+        if (resFoto.ok) {
+          const infoFoto = await resFoto.json();
+          if (infoFoto.photos && infoFoto.photos.length > 0) {
+            setFoto(infoFoto.photos[0].thumbnail_large.src);
+          }
         }
       } catch (error) {
-        console.error("Error al cargar la foto:", error);
+        console.error("Error al cargar datos de las APIs:", error);
       } finally {
-        setCargando(false); // Terminamos de cargar, haya error o no
+        setCargando(false);
       }
     };
 
-    if (hex) buscarFoto();
-  }, [hex]);
+    if (hex) buscarDatosAPI();
+  }, [hex, vuelo]); // React nos pide vigilar también "vuelo" por si cambia
 
   return (
-    <div
-      style={{
-        border: "1px solid #ccc",
-        padding: "15px",
-        borderRadius: "10px",
-        width: "300px",
-        backgroundColor: "#222",
-        color: "white",
-        fontFamily: "sans-serif",
-      }}
-    >
-      <h3 style={{ margin: "0 0 10px 0" }}>Vuelo: {vuelo || "N/A"}</h3>
-      <p style={{ margin: "5px 0" }}>
+    <div style={{ border: '1px solid #333', padding: '15px', borderRadius: '10px', backgroundColor: '#222', color: 'white', fontFamily: 'sans-serif' }}>
+      
+      {/* Cabecera con el Vuelo y la Matrícula */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+        <h3 style={{ margin: 0, color: '#61dafb' }}>{vuelo}</h3>
+        <span style={{ backgroundColor: '#444', padding: '3px 8px', borderRadius: '5px', fontSize: '0.9rem', fontWeight: 'bold' }}>
+          {datosAvion.matricula}
+        </span>
+      </div>
+
+      {/* RUTA DESTACADA */}
+      <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px dashed #444' }}>
+        <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#fff' }}>
+          {datosAvion.ruta}
+        </span>
+      </div>
+
+      <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#aaa' }}>
+        <strong>Modelo:</strong> {datosAvion.modelo}
+      </p>
+      <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#aaa' }}>
         <strong>HEX:</strong> {hex}
       </p>
-      <p style={{ margin: "5px 0" }}>
+      <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#aaa' }}>
         <strong>Altitud:</strong> {altitud} pies
       </p>
+      
       {/* Zona de la imagen */}
-      <div
-        style={{
-          marginTop: "15px",
-          minHeight: "150px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#333",
-          borderRadius: "5px",
-        }}
-      >
+      <div style={{ marginTop: '15px', minHeight: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#111', borderRadius: '5px', overflow: 'hidden' }}>
         {cargando ? (
-          <p>Buscando foto...</p>
+          <p style={{ color: '#666' }}>Cargando datos...</p>
         ) : foto ? (
-          <img
-            src={foto}
-            alt={`Avión ${hex}`}
-            style={{ width: "100%", borderRadius: "5px" }}
-          />
+          <img src={foto} alt={`Avión ${hex}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <p>Sin foto disponible</p>
+          <p style={{ color: '#666' }}>Sin foto</p>
         )}
       </div>
     </div>
