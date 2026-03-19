@@ -1,16 +1,23 @@
-# React + Vite
+# Fronted-Feeder-FR24
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Un frontend moderno y reactivo para receptores ADS-B (dump1090), diseñado para reemplazar la interfaz clásica con tarjetas de vuelo ricas en datos y fotos en tiempo real. 
 
-Currently, two official plugins are available:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Sobre el proyecto
 
-## React Compiler
+Este proyecto nace con la idea de mejorar visualmente la experiencia de monitorizar el espacio aéreo desde un receptor propio (Raspberry Pi + RTL-SDR). En lugar de depender de la antigua interfaz de mapa de `dump1090`, este frontend en React consume los datos JSON de la antena en tiempo real y los cruza de forma asíncrona con APIs externas para enriquecer la visualización.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+**Características principales:**
+* **Datos en vivo:** Consume el archivo `aircraft.json` de dump1090 sin recargar la página.
+* **Fotos al instante:** Integración con la API de [Planespotters.net](https://www.planespotters.net/) mediante código HEX.
+* **Información detallada:** Cruce de datos con la API de [HexDB](https://hexdb.io/) para obtener matrícula, aerolínea, modelo de avión y ruta de vuelo (Origen ➔ Destino).
+* **Responsive Design:** Diseño adaptativo usando CSS Grid.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Stack Tecnológico
+
+* **Frontend Framework:** React (Vite)
+* **Estilos:** CSS puro (Layout con Flexbox y CSS Grid)
+* **APIs Externas:** Fetch API asíncrona (HexDB, Planespotters)
+* **Hardware Origen:** Raspberry Pi + Antena SDR (FlightRadar24 Feeder)
