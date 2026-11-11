@@ -9,7 +9,7 @@ export default defineConfig({
     proxy: {
       // Cuando hagamos fetch a '/dump1090', Vite lo mandará a tu Raspberry
       '/dump1090': {
-        target: 'http://192.168.2.29', // IP Raspberry Pi
+        target: 'http://192.168.1.134', // IP Raspberry Pi
         changeOrigin: true,
       }
     }

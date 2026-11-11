@@ -10,10 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "leaflet": "^1.9.4",
+    "@deck.gl/core": "^9.4.1",
+    "@deck.gl/layers": "^9.4.1",
+    "@deck.gl/mapbox": "^9.4.1",
+    "@deck.gl/mesh-layers": "^9.4.1",
+    "@luma.gl/core": "~9.4.0",
+    "@math.gl/web-mercator": "^4.1.0",
+    "maplibre-gl": "^5.24.1",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-leaflet": "^5.0.0"
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

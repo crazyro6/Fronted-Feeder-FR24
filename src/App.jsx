@@ -1,103 +1,253 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AvionCard from "./AvionCard";
+import AvionModal from "./AvionModal";
+import Mapa3D from "./Mapa3D";
+import { normalizar, tienePos, distanciaKm, fmt } from "./datos";
 
-function App() {
-  const [aviones, setAviones] = useState([]);
+const URL_AVIONES = "/dump1090/data/aircraft.json";
+const URL_RECEPTOR = "/dump1090/data/receiver.json";
+const MAX_PUNTOS = 400; // puntos de rastro por avión
+const OLVIDAR_S = 300; // borrar rastro tras 5 min sin verlo
+// Si receiver.json no trae lat/lon, pon aquí la posición de tu antena: { lat: 28.1, lon: -15.4 }
+const RECEPTOR_MANUAL = null;
+
+const ORDENES = {
+  distancia: (a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9),
+  altitud: (a, b) => (b.alt ?? -1) - (a.alt ?? -1),
+  velocidad: (a, b) => (b.gs ?? -1) - (a.gs ?? -1),
+  vuelo: (a, b) => (a.vuelo ?? "~" + a.hex).localeCompare(b.vuelo ?? "~" + b.hex),
+  senal: (a, b) => (b.rssi ?? -99) - (a.rssi ?? -99),
+};
+
+export default function App() {
+  const [radar, setRadar] = useState({ aviones: [], rastros: {}, msgSeg: 0, ok: null });
+  const [receptor, setReceptor] = useState(RECEPTOR_MANUAL);
+  const [selHex, setSelHex] = useState(null);
+  const [modalAvion, setModalAvion] = useState(null);
+  const [busca, setBusca] = useState("");
+  const [orden, setOrden] = useState("distancia");
+  const [soloConVuelo, setSoloConVuelo] = useState(false);
 
   useEffect(() => {
-    const obtenerDatosRadar = async () => {
+    fetch(URL_RECEPTOR)
+      .then((r) => r.json())
+      .then((d) => d.lat != null && d.lon != null && setReceptor({ lat: d.lat, lon: d.lon }))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const rastros = {};
+    let previo = null;
+
+    const leer = async () => {
       try {
-        // Gracias al proxy, esta petición va directo a tu Raspberry sin error de CORS
-        const respuesta = await fetch("/dump1090/data/aircraft.json");
-        const datos = await respuesta.json();
+        const res = await fetch(URL_AVIONES);
+        const datos = await res.json();
+        const ahora = datos.now ?? Date.now() / 1000;
+        const aviones = datos.aircraft
+          .filter((a) => a.hex && (a.seen ?? 0) < 60)
+          .map((a) => ({ ...normalizar(a), ahora }));
 
-        // Filtramos para mostrar solo los aviones que ya han transmitido su Hex y su número de Vuelo
-        const avionesValidos = datos.aircraft.filter(
-          (avion) => avion.hex && avion.flight && avion.flight.trim() !== "",
-        );
+        for (const a of aviones) {
+          if (!tienePos(a) || (a.vistoPos ?? 0) > 30) continue;
+          const r = (rastros[a.hex] ??= []);
+          const ult = r.at(-1);
+          if (!ult || ult[0] !== a.lon || ult[1] !== a.lat || ult[4] !== a.alt) {
+            r.push([a.lon, a.lat, a.alt ?? 0, ahora - (a.vistoPos ?? 0), a.alt, a.gs]);
+            if (r.length > MAX_PUNTOS) r.shift();
+          }
+        }
+        for (const hex in rastros) {
+          if (ahora - rastros[hex].at(-1)[3] > OLVIDAR_S) delete rastros[hex];
+        }
 
-        setAviones(avionesValidos);
+        const msgSeg =
+          previo && datos.messages >= previo.m && ahora > previo.t
+            ? (datos.messages - previo.m) / (ahora - previo.t)
+            : 0;
+        previo = { m: datos.messages, t: ahora };
+
+        setRadar((s) => ({
+          aviones,
+          rastros: { ...rastros },
+          msgSeg: msgSeg || s.msgSeg,
+          ok: true,
+        }));
       } catch (error) {
         console.error("Error leyendo el radar:", error);
+        setRadar((s) => ({ ...s, ok: false }));
       }
     };
 
-    // Llamamos a la antena nada más abrir la web
-    obtenerDatosRadar();
-
-    // Configuramos un bucle para que pida datos cada 2 segundos (2000 ms)
-    const intervalo = setInterval(obtenerDatosRadar, 2000);
-
-    // Limpieza de seguridad
+    leer();
+    const intervalo = setInterval(leer, 2000);
     return () => clearInterval(intervalo);
   }, []);
 
+  const aviones = useMemo(
+    () =>
+      radar.aviones.map((a) => ({
+        ...a,
+        dist: receptor && tienePos(a) ? distanciaKm(receptor.lat, receptor.lon, a.lat, a.lon) : null,
+      })),
+    [radar.aviones, receptor],
+  );
+
+  const lista = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return aviones
+      .filter((a) => !soloConVuelo || a.vuelo)
+      .filter((a) => !q || a.hex.includes(q) || a.vuelo?.toLowerCase().includes(q) || a.squawk?.includes(q))
+      .sort(ORDENES[orden]);
+  }, [aviones, busca, orden, soloConVuelo]);
+
+  const stats = useMemo(() => {
+    const conPos = aviones.filter(tienePos);
+    const alto = aviones.reduce((m, a) => (a.alt != null && a.alt > (m?.alt ?? -1) ? a : m), null);
+    const lejos = aviones.reduce((m, a) => (a.dist != null && a.dist > (m?.dist ?? -1) ? a : m), null);
+    const rapido = aviones.reduce((m, a) => (a.gs != null && a.gs > (m?.gs ?? -1) ? a : m), null);
+    return { conPos: conPos.length, alto, lejos, rapido, mlat: aviones.filter((a) => a.mlat).length };
+  }, [aviones]);
+
+  const emergencias = aviones.filter((a) => ["7500", "7600", "7700"].includes(a.squawk) || a.emergencia);
+
+  const abrir = (hex) => {
+    setSelHex(hex);
+    setModalAvion(aviones.find((a) => a.hex === hex) ?? null);
+  };
+  const avionModalVivo = modalAvion && (aviones.find((a) => a.hex === modalAvion.hex) ?? modalAvion);
+
   return (
-    <div style={{ padding: "20px", minHeight: "100vh" }}>
-      {/* HEADER FLEX: Alinea título y contador horizontalmente y arregla el superpuesto */}
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "30px",
-          borderBottom: "1px solid #333",
-          paddingBottom: "15px",
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: "2rem" }}>Mi Radar FR24 Custom ✈️</h1>
-        <span
-          style={{
-            backgroundColor: "rgba(255,255,255,0.1)",
-            padding: "5px 15px",
-            borderRadius: "20px",
-            fontSize: "1rem",
-            fontWeight: "bold",
-          }}
-        >
-          {aviones.length} aviones detectados
-        </span>
+    <div className="app">
+      <header className="topbar">
+        <div className="marca">
+          <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5" opacity=".5" />
+            <circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" opacity=".7" />
+            <path d="M12 12 L12 2" stroke="currentColor" strokeWidth="2" className="barrido" />
+            <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+          </svg>
+          <div>
+            <h1>Radar ADS-B</h1>
+            <span className={`estado ${radar.ok === false ? "mal" : radar.ok ? "bien" : ""}`}>
+              {radar.ok === false ? "Sin conexión con la antena" : radar.ok ? "En vivo · dump1090" : "Conectando…"}
+            </span>
+          </div>
+        </div>
+
+        <div className="stats">
+          <Stat titulo="Aviones" valor={aviones.length} sub={`${stats.conPos} con posición`} />
+          <Stat titulo="Mensajes/s" valor={Math.round(radar.msgSeg)} sub={`${stats.mlat} por MLAT`} />
+          <Stat
+            titulo="Más alto"
+            valor={stats.alto ? fmt.alt(stats.alto) : "—"}
+            sub={stats.alto?.vuelo ?? stats.alto?.hex}
+            onClick={stats.alto && (() => abrir(stats.alto.hex))}
+          />
+          <Stat
+            titulo="Más lejano"
+            valor={stats.lejos ? fmt.km(stats.lejos.dist) : "—"}
+            sub={stats.lejos ? stats.lejos.vuelo ?? stats.lejos.hex : receptor ? "" : "Sin posición del receptor"}
+            onClick={stats.lejos && (() => abrir(stats.lejos.hex))}
+          />
+          <Stat
+            titulo="Más rápido"
+            valor={stats.rapido ? fmt.velKmh(stats.rapido.gs) : "—"}
+            sub={stats.rapido?.vuelo ?? stats.rapido?.hex}
+            onClick={stats.rapido && (() => abrir(stats.rapido.hex))}
+          />
+        </div>
       </header>
 
-      {/* CONTENEDOR GRID O FLEX: Esto hará que las tarjetas ocupen el ancho de la página */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", // Grid automático y responsive
-          gap: "20px",
-        }}
-      >
-        {aviones.length > 0 ? (
-          aviones.map((avion) => (
-            <AvionCard
-              key={avion.hex}
-              hex={avion.hex}
-              vuelo={avion.flight ? avion.flight.trim() : "Desconocido"}
-              // AQUÍ ESTÁ LA MAGIA: Le pasamos la primera altitud que encuentre,
-              // y si todas están vacías, le pasamos "Desconocida"
-              altitud={
-                avion.alt_baro ||
-                avion.alt_geom ||
-                avion.altitude ||
-                "Desconocida"
-              }
+      {emergencias.length > 0 && (
+        <div className="alerta" role="alert">
+          ⚠ Squawk de emergencia:{" "}
+          {emergencias.map((a) => (
+            <button key={a.hex} onClick={() => abrir(a.hex)}>
+              {a.vuelo ?? a.hex} ({a.squawk ?? a.emergencia})
+            </button>
+          ))}
+        </div>
+      )}
+
+      <main className="layout">
+        <section className="mapa-wrap">
+          <Mapa3D
+            aviones={aviones}
+            rastros={radar.rastros}
+            receptor={receptor}
+            seleccionado={selHex}
+            onSeleccion={abrir}
+          />
+        </section>
+
+        <aside className="lista">
+          <div className="lista-barra">
+            <input
+              type="search"
+              placeholder="Buscar vuelo, hex o squawk…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              aria-label="Buscar avión"
             />
-          ))
-        ) : (
-          <p
-            style={{
-              fontSize: "1.2rem",
-              color: "#999",
-              textAlign: "center",
-              gridColumn: "1 / -1",
-            }}
-          >
-            Escaneando el cielo... 📡
-          </p>
-        )}
-      </div>
+            <div className="lista-opciones">
+              <label>
+                Orden
+                <select value={orden} onChange={(e) => setOrden(e.target.value)}>
+                  <option value="distancia">Distancia</option>
+                  <option value="altitud">Altitud</option>
+                  <option value="velocidad">Velocidad</option>
+                  <option value="vuelo">Vuelo</option>
+                  <option value="senal">Señal</option>
+                </select>
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={soloConVuelo} onChange={(e) => setSoloConVuelo(e.target.checked)} />
+                Solo con nº de vuelo
+              </label>
+              <span className="contador">{lista.length}</span>
+            </div>
+          </div>
+
+          <div className="tarjetas">
+            {lista.length > 0 ? (
+              lista.map((avion) => (
+                <AvionCard
+                  key={avion.hex}
+                  avion={avion}
+                  seleccionado={avion.hex === selHex}
+                  onClick={() => abrir(avion.hex)}
+                />
+              ))
+            ) : (
+              <p className="vacio">
+                {radar.ok === false ? "No llegan datos de la Raspberry." : "Escaneando el cielo…"}
+              </p>
+            )}
+          </div>
+        </aside>
+      </main>
+
+      {avionModalVivo && (
+        <AvionModal
+          avion={avionModalVivo}
+          perdido={!aviones.some((a) => a.hex === avionModalVivo.hex)}
+          rastro={radar.rastros[avionModalVivo.hex] ?? []}
+          receptor={receptor}
+          onCerrar={() => setModalAvion(null)}
+        />
+      )}
     </div>
   );
 }
 
-export default App;
+function Stat({ titulo, valor, sub, onClick }) {
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag className="stat" onClick={onClick || undefined}>
+      <span className="stat-t">{titulo}</span>
+      <strong>{valor}</strong>
+      {sub && <small>{sub}</small>}
+    </Tag>
+  );
+}
