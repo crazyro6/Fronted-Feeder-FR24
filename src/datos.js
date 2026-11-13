@@ -29,9 +29,9 @@ export function normalizar(a) {
     mensajes: num(a.messages),
     visto: num(a.seen),
     vistoPos: num(a.seen_pos),
-    mlat: Array.isArray(a.mlat) ? a.mlat.length > 0 : false,
-    tisb: Array.isArray(a.tisb) ? a.tisb.length > 0 : false,
-    tipoFuente: a.type || null,
+    mlat: a.type === "mlat" || (Array.isArray(a.mlat) && a.mlat.length > 0),
+    tisb: a.type?.startsWith("tisb") || (Array.isArray(a.tisb) && a.tisb.length > 0),
+    tipoFuente: FUENTES[a.type] ?? a.type ?? null,
     navAlt: num(a.nav_altitude_mcp ?? a.nav_altitude_fms),
     navRumbo: num(a.nav_heading),
     qnh: num(a.nav_qnh),
@@ -39,6 +39,19 @@ export function normalizar(a) {
     oat: num(a.oat),
   };
 }
+
+// campo "type" de readsb
+const FUENTES = {
+  adsb_icao: "ADS-B",
+  adsb_icao_nt: "ADS-B (no transponder)",
+  adsr_icao: "ADS-R",
+  adsb_other: "ADS-B (no ICAO)",
+  adsr_other: "ADS-R (no ICAO)",
+  mode_s: "Mode S",
+  adsc: "ADS-C",
+  other: "Otro",
+  unknown: "Desconocida",
+};
 
 function num(v) {
   return typeof v === "number" && Number.isFinite(v) ? v : null;

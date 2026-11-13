@@ -4,8 +4,10 @@ import AvionModal from "./AvionModal";
 import Mapa3D from "./Mapa3D";
 import { normalizar, tienePos, distanciaKm, fmt } from "./datos";
 
-const URL_AVIONES = "/dump1090/data/aircraft.json";
-const URL_RECEPTOR = "/dump1090/data/receiver.json";
+// Ruta relativa: en dev la pasa el proxy de Vite; en producción, mismo dominio (o cámbiala con VITE_RADAR_URL)
+const BASE = import.meta.env.VITE_RADAR_URL ?? "/adsbx/data";
+const URL_AVIONES = `${BASE}/aircraft.json`;
+const URL_RECEPTOR = `${BASE}/receiver.json`;
 const MAX_PUNTOS = 400; // puntos de rastro por avión
 const OLVIDAR_S = 300; // borrar rastro tras 5 min sin verlo
 // Si receiver.json no trae lat/lon, pon aquí la posición de tu antena: { lat: 28.1, lon: -15.4 }
@@ -130,7 +132,7 @@ export default function App() {
           <div>
             <h1>Radar ADS-B</h1>
             <span className={`estado ${radar.ok === false ? "mal" : radar.ok ? "bien" : ""}`}>
-              {radar.ok === false ? "Sin conexión con la antena" : radar.ok ? "En vivo · dump1090" : "Conectando…"}
+              {radar.ok === false ? "Sin conexión con la antena" : radar.ok ? "En vivo · readsb" : "Conectando…"}
             </span>
           </div>
         </div>

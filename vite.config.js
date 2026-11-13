@@ -7,8 +7,8 @@ export default defineConfig({
   base: './', 
   server: {
     proxy: {
-      // Cuando hagamos fetch a '/dump1090', Vite lo mandará a tu Raspberry
-      '/dump1090': {
+      // Cuando hagamos fetch a '/adsbx', Vite lo mandará a tu Raspberry
+      '/adsbx': {
         target: 'http://192.168.1.134', // IP Raspberry Pi
         changeOrigin: true,
       }
