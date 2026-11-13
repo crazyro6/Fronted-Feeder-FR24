@@ -48,7 +48,7 @@ export default function Mapa3D({ aviones, rastros, receptor, seleccionado, onSel
   const cambiar = (k, v) => setOp((o) => ({ ...o, [k]: v ?? !o[k] }));
 
   const sel = aviones.find((a) => a.hex === seleccionado);
-  const infoSel = useAvionInfo(sel?.hex ?? null, sel?.vuelo ?? null);
+  const infoSel = useAvionInfo(sel);
 
   useEffect(() => {
     avionesRef.current = aviones;
@@ -76,7 +76,7 @@ export default function Mapa3D({ aviones, rastros, receptor, seleccionado, onSel
         object?.hex && layer?.id !== "rastros"
           ? {
               html: `<b>${object.vuelo ?? object.hex.toUpperCase()}</b><br>${fmt.alt(object)} · ${fmt.vel(object.gs)} · ${fmt.grados(object.track)}${
-                object.dist != null ? `<br>${fmt.km(object.dist)} del receptor` : ""
+                object.dist != null ? `<br>${fmt.kmAprox(object.dist)} del centro` : ""
               }`,
               className: "tooltip-avion",
             }
@@ -196,16 +196,14 @@ export default function Mapa3D({ aviones, rastros, receptor, seleccionado, onSel
           getColor: op.estilo === "claro" ? [30, 60, 100, 200] : [150, 200, 255, 160],
           getPixelOffset: [0, -8],
         }),
+        // Mancha difusa de 2 km, no un punto: el centro es aproximado y no debe parecer la antena
         new ScatterplotLayer({
-          id: "receptor",
+          id: "centro",
           data: [receptor],
           getPosition: (d) => [d.lon, d.lat],
-          getRadius: 6,
-          radiusUnits: "pixels",
-          getFillColor: [255, 70, 90],
-          stroked: true,
-          getLineColor: [255, 255, 255],
-          lineWidthMinPixels: 2,
+          getRadius: 2000,
+          radiusUnits: "meters",
+          getFillColor: op.estilo === "claro" ? [30, 60, 100, 50] : [120, 180, 255, 45],
         }),
       );
     }
@@ -304,7 +302,7 @@ export default function Mapa3D({ aviones, rastros, receptor, seleccionado, onSel
           background: true,
           getBackgroundColor: [8, 14, 24, 200],
           backgroundPadding: [5, 3],
-          fontFamily: "IBM Plex Mono, monospace",
+          fontFamily: "B612 Mono, monospace",
           fontWeight: 600,
           lineHeight: 1.1,
           pickable: true,
@@ -321,7 +319,7 @@ export default function Mapa3D({ aviones, rastros, receptor, seleccionado, onSel
   }, [capas]);
 
   const vista = (pitch) => mapRef.current?.easeTo({ pitch, duration: 800 });
-  const alReceptor = () =>
+  const alCentro = () =>
     receptor && mapRef.current?.flyTo({ center: [receptor.lon, receptor.lat], zoom: 8.5, duration: 1200 });
 
   return (
@@ -340,7 +338,7 @@ export default function Mapa3D({ aviones, rastros, receptor, seleccionado, onSel
         <div className="seg">
           <button onClick={() => vista(60)}>3D</button>
           <button onClick={() => vista(0)}>Cenital</button>
-          {receptor && <button onClick={alReceptor}>Receptor</button>}
+          {receptor && <button onClick={alCentro}>Centro</button>}
         </div>
         <div className="toggles">
           {[
@@ -367,6 +365,7 @@ export default function Mapa3D({ aviones, rastros, receptor, seleccionado, onSel
             <span key={t}>{t}</span>
           ))}
         </div>
+        <p className="leyenda-nota">Distancias y anillos desde un centro aproximado (±1 km), no desde la antena.</p>
       </div>
       <p className="mapa-ayuda">Arrastra para mover · Clic derecho / Ctrl + arrastrar para rotar e inclinar · Clic en un avión para ver detalles</p>
     </div>

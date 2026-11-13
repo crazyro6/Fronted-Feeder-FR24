@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "publicar": "vite build --emptyOutDir --outDir \"E:/Proyectos Otros/Portfolio personal/public/radar\"",
     "lint": "eslint .",
     "preview": "vite preview"
   },

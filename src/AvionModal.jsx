@@ -13,7 +13,7 @@ import {
 
 export default function AvionModal({ avion, perdido, rastro, receptor, onCerrar }) {
   const ref = useRef(null);
-  const info = useAvionInfo(avion.hex, avion.vuelo);
+  const info = useAvionInfo(avion);
   const [fotoIdx, setFotoIdx] = useState(0);
   const foto = info?.fotos[fotoIdx];
   const color = rgb(colorAltitud(avion.alt));
@@ -23,6 +23,7 @@ export default function AvionModal({ avion, perdido, rastro, receptor, onCerrar 
     if (!ref.current.open) ref.current.showModal();
   }, []);
 
+  // receptor = centro aproximado del radar (±1 km), así que distancia y dirección son aproximadas
   const conPos = avion.lat != null && avion.lon != null;
   const distRx = receptor && conPos ? distanciaKm(receptor.lat, receptor.lon, avion.lat, avion.lon) : null;
   const rumboRx = receptor && conPos ? rumboHacia(receptor.lat, receptor.lon, avion.lat, avion.lon) : null;
@@ -32,6 +33,10 @@ export default function AvionModal({ avion, perdido, rastro, receptor, onCerrar 
   const sqInfo = avion.squawk && SQUAWKS[avion.squawk];
   const emergencia = ["7500", "7600", "7700"].includes(avion.squawk);
   const fuente = avion.mlat ? "MLAT" : avion.tisb ? "TIS-B" : avion.tipoFuente ?? "ADS-B";
+  // la descripción de la Pi ya suele empezar por el fabricante («AIRBUS A-320neo»)
+  const fab = info?.fabricante;
+  const modeloCompleto =
+    fab && !info.modelo?.toLowerCase().startsWith(fab.toLowerCase()) ? [fab, info.modelo].filter(Boolean).join(" ") : info?.modelo;
 
   return (
     <dialog
@@ -79,7 +84,7 @@ export default function AvionModal({ avion, perdido, rastro, receptor, onCerrar 
             <h2 id="modal-titulo">{avion.vuelo ?? avion.hex.toUpperCase()}</h2>
             <p className="m-aerolinea">{info?.propietario ?? (info ? "Operador desconocido" : "Cargando…")}</p>
             <p className="m-modelo">
-              {[info?.fabricante, info?.modelo].filter(Boolean).join(" ") || "Modelo desconocido"}
+              {modeloCompleto || "Modelo desconocido"}
               {info?.matricula && <span className="reg">{info.matricula}</span>}
             </p>
 
@@ -127,8 +132,8 @@ export default function AvionModal({ avion, perdido, rastro, receptor, onCerrar 
                 filas={[
                   ["Latitud", fmt.coord(avion.lat)],
                   ["Longitud", fmt.coord(avion.lon)],
-                  ["Distancia al receptor", distRx != null ? fmt.km(distRx) : "—"],
-                  ["Dirección desde receptor", rumboRx != null ? `${fmt.grados(rumboRx)} ${puntoCardinal(rumboRx)}` : "—"],
+                  ["Distancia al centro (aprox.)", fmt.kmAprox(distRx)],
+                  ["Dirección desde el centro (aprox.)", rumboRx != null ? `≈ ${fmt.grados(rumboRx)} ${puntoCardinal(rumboRx)}` : "—"],
                   ["Squawk", avion.squawk ? `${avion.squawk}${sqInfo ? ` · ${sqInfo}` : ""}` : "—"],
                 ]}
               />
@@ -319,7 +324,7 @@ function Brujula({ rumbo }) {
 }
 
 function Senal({ rssi }) {
-  // RSSI de dump1090 va de ~ -50 (débil) a 0 dBFS (fuerte)
+  // RSSI de readsb va de ~ -50 (débil) a 0 dBFS (fuerte)
   const pct = Math.max(0, Math.min(100, ((rssi + 40) / 40) * 100));
   return (
     <span className="senal">

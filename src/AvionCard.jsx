@@ -1,7 +1,7 @@
 import { useAvionInfo, colorAltitud, rgb, fmt } from "./datos";
 
 export default function AvionCard({ avion, seleccionado, onClick }) {
-  const info = useAvionInfo(avion.hex, avion.vuelo);
+  const info = useAvionInfo(avion);
   const foto = info?.fotos[0];
   const emergencia = ["7500", "7600", "7700"].includes(avion.squawk);
   const ruta = info?.origen && info?.destino;
@@ -51,7 +51,9 @@ export default function AvionCard({ avion, seleccionado, onClick }) {
           <span title="Velocidad vertical" className={avion.vrate > 256 ? "sube" : avion.vrate < -256 ? "baja" : ""}>
             {avion.vrate > 256 ? "▲" : avion.vrate < -256 ? "▼" : "▬"}
           </span>
-          <span title="Distancia al receptor">{avion.dist != null ? fmt.km(avion.dist) : avion.lat == null ? "sin pos." : ""}</span>
+          <span title="Distancia aproximada al centro del radar">
+            {avion.dist != null ? fmt.kmAprox(avion.dist) : avion.lat == null ? "sin pos." : ""}
+          </span>
           {avion.squawk && <span className={`sq${emergencia ? " rojo" : ""}`}>{avion.squawk}</span>}
         </div>
       </div>

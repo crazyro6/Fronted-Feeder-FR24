@@ -3,23 +3,27 @@ import { useEffect, useState } from "react";
 const FT_M = 0.3048;
 const KT_KMH = 1.852;
 
-// dump1090 viejo usa altitude/speed/vert_rate; readsb usa alt_baro/gs/baro_rate
+// Campos del aircraft.json de readsb/tar1090 (los que deja pasar el Worker del portfolio)
 export function normalizar(a) {
-  const altRaw = a.alt_baro ?? a.altitude;
-  const enSuelo = altRaw === "ground";
-  const alt = enSuelo ? 0 : num(altRaw ?? a.alt_geom);
+  const enSuelo = a.alt_baro === "ground";
+  const alt = enSuelo ? 0 : num(a.alt_baro ?? a.alt_geom);
   return {
     hex: a.hex.toLowerCase(),
     vuelo: a.flight?.trim() || null,
+    // de la base de datos de la Pi (tar1090-db), si la tiene
+    matricula: texto(a.r),
+    tipoIcao: texto(a.t),
+    modelo: texto(a.desc),
+    propietario: texto(a.ownOp),
     alt,
     altGeom: num(a.alt_geom),
     enSuelo,
-    gs: num(a.gs ?? a.speed),
+    gs: num(a.gs),
     ias: num(a.ias),
     tas: num(a.tas),
     mach: num(a.mach),
     track: num(a.track ?? a.true_heading ?? a.mag_heading),
-    vrate: num(a.baro_rate ?? a.geom_rate ?? a.vert_rate),
+    vrate: num(a.baro_rate ?? a.geom_rate),
     squawk: a.squawk || null,
     emergencia: a.emergency && a.emergency !== "none" ? a.emergency : null,
     categoria: a.category || null,
@@ -56,6 +60,7 @@ const FUENTES = {
 function num(v) {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
+const texto = (v) => (typeof v === "string" && v.trim()) || null;
 
 export const tienePos = (a) => a.lat != null && a.lon != null;
 
@@ -111,6 +116,8 @@ export const fmt = {
   vrate: (v) => (v != null ? `${v > 0 ? "+" : ""}${v.toLocaleString("es")} ft/min` : "—"),
   grados: (g) => (g != null ? `${Math.round(g)}°` : "—"),
   km: (d) => (d != null ? `${d < 10 ? d.toFixed(1) : Math.round(d)} km` : "—"),
+  // distancias medidas desde el centro aproximado del radar, no desde la antena
+  kmAprox: (d) => (d != null ? `≈ ${fmt.km(d)}` : "—"),
   seg: (s) => (s != null ? `${s.toFixed(1)} s` : "—"),
   coord: (v) => (v != null ? v.toFixed(5) : "—"),
 };
@@ -149,7 +156,9 @@ export const CATEGORIAS = {
   C3: "Obstáculo",
 };
 
-// ---------- Info externa (HexDB + Planespotters), cacheada por hex/vuelo ----------
+// ---------- Ficha: Pi + HexDB + Planespotters, cacheada por hex/vuelo ----------
+// Igual que el portfolio (src/lib/aircraft.ts): matrícula, tipo y modelo mandan los
+// de la Pi; aerolínea y ruta, HexDB (con ownOp de la Pi como respaldo); foto, Planespotters.
 const cache = new Map();
 
 async function getJson(url) {
@@ -164,7 +173,7 @@ async function getJson(url) {
   }
 }
 
-async function cargarInfo(hex, vuelo) {
+async function cargarInfo({ hex, vuelo, matricula, tipoIcao, modelo, propietario }) {
   const [avion, ruta, fotos] = await Promise.all([
     getJson(`https://hexdb.io/api/v1/aircraft/${hex.toUpperCase()}`),
     vuelo ? getJson(`https://hexdb.io/api/v1/route/icao/${vuelo}`) : null,
@@ -179,11 +188,11 @@ async function cargarInfo(hex, vuelo) {
   );
 
   return {
-    matricula: avion?.Registration || null,
+    matricula: matricula || avion?.Registration || null,
     fabricante: avion?.Manufacturer || null,
-    modelo: avion?.Type || null,
-    tipoIcao: avion?.ICAOTypeCode || null,
-    propietario: avion?.RegisteredOwners || null,
+    modelo: modelo || avion?.Type || null,
+    tipoIcao: tipoIcao || avion?.ICAOTypeCode || null,
+    propietario: avion?.RegisteredOwners || propietario || null,
     operador: avion?.OperatorFlagCode || null,
     origen,
     destino,
@@ -196,22 +205,23 @@ async function cargarInfo(hex, vuelo) {
   };
 }
 
-export function useAvionInfo(hex, vuelo) {
-  const clave = `${hex}|${vuelo ?? ""}`;
+export function useAvionInfo(avion) {
+  const hex = avion?.hex;
+  const clave = `${hex}|${avion?.vuelo ?? ""}`;
   const [, forzar] = useState(0);
 
   useEffect(() => {
     if (!hex) return;
     let vivo = true;
     if (!cache.has(clave)) {
-      cache.set(clave, cargarInfo(hex, vuelo).then((info) => (cache.set(clave, info), info)));
+      cache.set(clave, cargarInfo(avion).then((info) => (cache.set(clave, info), info)));
     }
     const v = cache.get(clave);
     if (v instanceof Promise) v.then(() => vivo && forzar((n) => n + 1));
     return () => {
       vivo = false;
     };
-  }, [clave, hex, vuelo]);
+  }, [clave]); // eslint-disable-line react-hooks/exhaustive-deps -- la ficha solo cambia con el avión o el vuelo
 
   const v = cache.get(clave);
   return v && !(v instanceof Promise) ? v : null;

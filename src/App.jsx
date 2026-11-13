@@ -4,14 +4,14 @@ import AvionModal from "./AvionModal";
 import Mapa3D from "./Mapa3D";
 import { normalizar, tienePos, distanciaKm, fmt } from "./datos";
 
-// Ruta relativa: en dev la pasa el proxy de Vite; en producción, mismo dominio (o cámbiala con VITE_RADAR_URL)
-const BASE = import.meta.env.VITE_RADAR_URL ?? "/adsbx/data";
+// API pública del portfolio (mismo dominio en roypara.com/radar/; en dev la pasa el proxy de Vite).
+// receiver.json da solo el centro APROXIMADO del radar: no pongas aquí nunca la posición de la antena.
+const BASE = import.meta.env.VITE_RADAR_URL ?? "/api";
 const URL_AVIONES = `${BASE}/aircraft.json`;
 const URL_RECEPTOR = `${BASE}/receiver.json`;
+const REFRESCO_MS = 5000; // el Worker cachea 5 s: leer más rápido no trae nada nuevo y gasta cuota
 const MAX_PUNTOS = 400; // puntos de rastro por avión
 const OLVIDAR_S = 300; // borrar rastro tras 5 min sin verlo
-// Si receiver.json no trae lat/lon, pon aquí la posición de tu antena: { lat: 28.1, lon: -15.4 }
-const RECEPTOR_MANUAL = null;
 
 const ORDENES = {
   distancia: (a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9),
@@ -23,7 +23,7 @@ const ORDENES = {
 
 export default function App() {
   const [radar, setRadar] = useState({ aviones: [], rastros: {}, msgSeg: 0, ok: null });
-  const [receptor, setReceptor] = useState(RECEPTOR_MANUAL);
+  const [receptor, setReceptor] = useState(null); // centro aproximado, no la antena
   const [selHex, setSelHex] = useState(null);
   const [modalAvion, setModalAvion] = useState(null);
   const [busca, setBusca] = useState("");
@@ -44,6 +44,7 @@ export default function App() {
     const leer = async () => {
       try {
         const res = await fetch(URL_AVIONES);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`); // 503 = la antena no responde
         const datos = await res.json();
         const ahora = datos.now ?? Date.now() / 1000;
         const aviones = datos.aircraft
@@ -81,9 +82,20 @@ export default function App() {
       }
     };
 
-    leer();
-    const intervalo = setInterval(leer, 2000);
-    return () => clearInterval(intervalo);
+    // Con la pestaña oculta no se pide nada: la cuota del Worker es compartida.
+    let intervalo;
+    const arrancar = () => {
+      clearInterval(intervalo);
+      if (document.hidden) return;
+      leer();
+      intervalo = setInterval(leer, REFRESCO_MS);
+    };
+    arrancar();
+    document.addEventListener("visibilitychange", arrancar);
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", arrancar);
+    };
   }, []);
 
   const aviones = useMemo(
@@ -131,6 +143,9 @@ export default function App() {
           </svg>
           <div>
             <h1>Radar ADS-B</h1>
+            <a className="volver" href="https://roypara.com/">
+              ← roypara.com
+            </a>
             <span className={`estado ${radar.ok === false ? "mal" : radar.ok ? "bien" : ""}`}>
               {radar.ok === false ? "Sin conexión con la antena" : radar.ok ? "En vivo · readsb" : "Conectando…"}
             </span>
@@ -148,8 +163,8 @@ export default function App() {
           />
           <Stat
             titulo="Más lejano"
-            valor={stats.lejos ? fmt.km(stats.lejos.dist) : "—"}
-            sub={stats.lejos ? stats.lejos.vuelo ?? stats.lejos.hex : receptor ? "" : "Sin posición del receptor"}
+            valor={fmt.kmAprox(stats.lejos?.dist)}
+            sub={stats.lejos ? stats.lejos.vuelo ?? stats.lejos.hex : receptor ? "" : "Sin centro del radar"}
             onClick={stats.lejos && (() => abrir(stats.lejos.hex))}
           />
           <Stat
