@@ -4,6 +4,8 @@ Interfaz web en directo para mi receptor ADS-B (Raspberry Pi + RTL-SDR con reads
 
 Se ve en **[roypara.com/radar/](https://roypara.com/radar/)**, dentro de mi portfolio ([crazyro6/roypara.com](https://github.com/crazyro6/roypara.com)).
 
+![Mapa 3D sobre Gran Canaria con los aviones en vuelo a su altitud, coloreados por altitud, con indicativo, nivel de vuelo y anillos de alcance](docs/mapa.png)
+
 ![Ficha de un vuelo de Lanzarote a Gran Canaria: ruta con progreso y hora estimada de llegada, datos de vuelo, posición con brújula, perfil de altitud y velocidad, aeronave y recepción](docs/ficha.png)
 
 *Ficha de un avión (sin la foto de Planespotters, que es de su autor y no se redistribuye aquí).*
@@ -35,6 +37,8 @@ Se pide una vez por avión y vuelo.
 React 19 + Vite, MapLibre GL (mapa y relieve 3D) y deck.gl (aviones, rastros y etiquetas), con CSS sin frameworks. La fuente de los datos es B612 Mono, la de las pantallas de cabina de Airbus, como en el portfolio.
 
 Mapas de [OpenFreeMap](https://openfreemap.org), satélite de Esri y relieve de AWS Terrain Tiles.
+
+**deck.gl está fijado en 9.3.12** (y `@luma.gl/core` en 9.3). Con deck.gl 9.4.1, en Chrome/Brave/Helium con una AMD Radeon (ANGLE sobre Direct3D 11), las capas `ScatterplotLayer`, `LineLayer`, `SimpleMeshLayer` y el fondo de `TextLayer` hacían caer el proceso de GPU: se perdía el contexto WebGL y no se veían los aviones (o salían bandas de colores). Antes de subir de versión, comprueba el mapa en un navegador Chromium de escritorio.
 
 ## Desarrollo
 
