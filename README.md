@@ -4,6 +4,10 @@ Interfaz web en directo para mi receptor ADS-B (Raspberry Pi + RTL-SDR con reads
 
 Se ve en **[roypara.com/radar/](https://roypara.com/radar/)**, dentro de mi portfolio ([crazyro6/roypara.com](https://github.com/crazyro6/roypara.com)).
 
+![Ficha de un vuelo de Lanzarote a Gran Canaria: ruta con progreso y hora estimada de llegada, datos de vuelo, posición con brújula, perfil de altitud y velocidad, aeronave y recepción](docs/ficha.png)
+
+*Ficha de un avión (sin la foto de Planespotters, que es de su autor y no se redistribuye aquí).*
+
 ## De dónde salen los datos
 
 ```
